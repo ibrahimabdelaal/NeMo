@@ -66,16 +66,18 @@ def main(cfg):
 
     # --- Definitive Logic: Build from config, then manually load filtered weights ---
     
-    # 1. Build the model from the config file using our custom class.
+    # --- This is the critical fix ---
+    # 1. Save the optimizer config BEFORE creating the model.
+    optim_config = cfg.model.optim
+    
+    # 2. Build the model from the config file using our custom class.
     logging.info("Building model from config...")
     asr_model = CustomHybridModel(cfg=cfg.model, trainer=trainer)
 
-    # --- This is the critical fix ---
-    # Manually attach the optimizer config to the model object.
-    # This makes it available inside the `configure_optimizers` method.
-    asr_model._new_optim_config = cfg.model.optim
+    # 3. Manually attach the saved optimizer config to the model object.
+    asr_model._new_optim_config = optim_config
 
-    # 2. Manually load the pretrained model from Hugging Face to get its weights.
+    # 4. Manually load the pretrained model from Hugging Face to get its weights.
     pretrained_model_name = cfg.model.init_from_pretrained_model
     logging.info(f"Downloading and loading pretrained model: {pretrained_model_name}")
     
@@ -84,13 +86,13 @@ def main(cfg):
     pretrained_weights = pretrained_model.state_dict()
     del pretrained_model  # Free up memory
 
-    # 3. Create a new state_dict, keeping only the encoder weights.
+    # 5. Create a new state_dict, keeping only the encoder weights.
     new_state_dict = {}
     for key, value in pretrained_weights.items():
         if key.startswith('encoder.'):
             new_state_dict[key] = value
 
-    # 4. Load the filtered (encoder-only) weights into our new model.
+    # 6. Load the filtered (encoder-only) weights into our new model.
     asr_model.load_state_dict(new_state_dict, strict=False)
     
     logging.info(f"Successfully loaded {len(new_state_dict)} encoder weights.")
