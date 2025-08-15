@@ -58,10 +58,8 @@ def main(cfg):
 
     # --- Definitive Logic: Build from config, then manually load filtered weights ---
     
-    # 1. Build the model from the config file.
-    #    This creates the model with your new, smaller tokenizer and randomly initialized decoders.
+    # 1. Build the model from the config file using our custom class.
     logging.info("Building model from config...")
-    cfg.model._target_ = f'{__name__}.CustomHybridModel'
     asr_model = CustomHybridModel(cfg=cfg.model, trainer=trainer)
 
     # --- IMPORTANT: The following block REPLACES `maybe_init_from_pretrained_checkpoint` ---
