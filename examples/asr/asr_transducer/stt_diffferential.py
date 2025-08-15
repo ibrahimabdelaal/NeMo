@@ -64,14 +64,15 @@ def main(cfg):
 
     # --- IMPORTANT: The following block REPLACES `maybe_init_from_pretrained_checkpoint` ---
     # 2. Manually load the pretrained weights and filter them.
-    logging.info(f"Loading and filtering weights from {cfg.init_from_nemo_model}")
+    # The script now looks for the path inside the `model` config block.
+    logging.info(f"Loading and filtering weights from {cfg.model.init_from_nemo_model}")
     
     with tempfile.TemporaryDirectory() as restore_dir:
         # Ensure the .nemo file exists before trying to open it
-        if not os.path.exists(cfg.init_from_nemo_model):
-            raise FileNotFoundError(f"The .nemo file was not found at path: {cfg.init_from_nemo_model}")
+        if not os.path.exists(cfg.model.init_from_nemo_model):
+            raise FileNotFoundError(f"The .nemo file was not found at path: {cfg.model.init_from_nemo_model}")
             
-        with tarfile.open(cfg.init_from_nemo_model, "r:gz") as tar:
+        with tarfile.open(cfg.model.init_from_nemo_model, "r:gz") as tar:
             tar.extractall(path=restore_dir)
         
         checkpoint_path = os.path.join(restore_dir, 'model_weights.ckpt')
