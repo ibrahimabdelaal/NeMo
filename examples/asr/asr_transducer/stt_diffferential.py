@@ -43,8 +43,11 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             param_groups = [encoder_params, decoder_params]
             optimizer = torch.optim.AdamW(param_groups, **optimizer_kwargs)
             
+            # --- MINIMAL CHANGE APPLIED HERE ---
+            # The `scheduler_config` argument now correctly points to `optim_config.decoder_optim`
+            # instead of `optim_config.decoder_optim.sched`.
             scheduler_config = prepare_lr_scheduler(
-                optimizer=optimizer, scheduler_config=optim_config.decoder_optim.sched
+                optimizer=optimizer, scheduler_config=optim_config.decoder_optim
             )
             
             scheduler = {
