@@ -19,7 +19,8 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
         Overrides the standard PyTorch Lightning method to set up
         differential learning rates for the encoder and decoders.
         """
-        optim_config = self.cfg.optim
+        # Read the optimizer config from the attribute we manually attached.
+        optim_config = self._new_optim_config
 
         if "encoder_optim" in optim_config and "decoder_optim" in optim_config:
             logging.info("Setting up differential learning rates for encoder and decoders.")
@@ -68,6 +69,11 @@ def main(cfg):
     # 1. Build the model from the config file using our custom class.
     logging.info("Building model from config...")
     asr_model = CustomHybridModel(cfg=cfg.model, trainer=trainer)
+
+    # --- This is the critical fix ---
+    # Manually attach the optimizer config to the model object.
+    # This makes it available inside the `configure_optimizers` method.
+    asr_model._new_optim_config = cfg.model.optim
 
     # 2. Manually load the pretrained model from Hugging Face to get its weights.
     pretrained_model_name = cfg.model.init_from_pretrained_model
