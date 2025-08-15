@@ -39,11 +39,12 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
                 "betas": optim_config.decoder_optim.betas,
                 "weight_decay": optim_config.decoder_optim.weight_decay,
             }
+            
             param_groups = [encoder_params, decoder_params]
             optimizer = torch.optim.AdamW(param_groups, **optimizer_kwargs)
-
+            
             scheduler_config = prepare_lr_scheduler(
-                optimizer=optimizer, optim_config=optim_config.decoder_optim.sched, trainer=self.trainer
+                optimizer=optimizer, scheduler_config=optim_config.decoder_optim.sched, trainer=self.trainer
             )
             
             scheduler = {
