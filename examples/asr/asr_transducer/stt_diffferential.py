@@ -62,21 +62,14 @@ def main(cfg):
     logging.info("Building model from config...")
     asr_model = CustomHybridModel(cfg=cfg.model, trainer=trainer)
 
-    # --- IMPORTANT: The following block REPLACES `maybe_init_from_pretrained_checkpoint` ---
-    # 2. Manually load the pretrained weights and filter them.
-    # The script now looks for the path inside the `model` config block.
-    logging.info(f"Loading and filtering weights from {cfg.model.init_from_nemo_model}")
+    # 2. Manually load the pretrained model from Hugging Face to get its weights.
+    pretrained_model_name = cfg.model.init_from_pretrained_model
+    logging.info(f"Downloading and loading pretrained model: {pretrained_model_name}")
     
-    with tempfile.TemporaryDirectory() as restore_dir:
-        # Ensure the .nemo file exists before trying to open it
-        if not os.path.exists(cfg.model.init_from_nemo_model):
-            raise FileNotFoundError(f"The .nemo file was not found at path: {cfg.model.init_from_nemo_model}")
-            
-        with tarfile.open(cfg.model.init_from_nemo_model, "r:gz") as tar:
-            tar.extractall(path=restore_dir)
-        
-        checkpoint_path = os.path.join(restore_dir, 'model_weights.ckpt')
-        pretrained_weights = torch.load(checkpoint_path, map_location='cpu')
+    # We load the full model into a temporary object just to get its state_dict
+    pretrained_model = CustomHybridModel.from_pretrained(model_name=pretrained_model_name, map_location='cpu')
+    pretrained_weights = pretrained_model.state_dict()
+    del pretrained_model  # Free up memory
 
     # 3. Create a new state_dict, keeping only the encoder weights.
     #    This directly implements your request: "we do not want the weights from the decoder".
