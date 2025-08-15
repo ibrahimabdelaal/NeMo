@@ -10,7 +10,8 @@ from nemo.core.config import hydra_runner
 from nemo.utils import logging
 from nemo.utils.exp_manager import exp_manager
 from nemo.utils.trainer_utils import resolve_trainer_cfg
-from nemo.core.optim.lr_scheduler import prepare_lr_scheduler
+# Import the specific scheduler class instead of the general utility
+from nemo.core.optim.lr_scheduler import NoamAnnealing
 
 class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
     # --- This is the corrected approach: Override configure_optimizers ---
@@ -43,15 +44,33 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             param_groups = [encoder_params, decoder_params]
             optimizer = torch.optim.AdamW(param_groups, **optimizer_kwargs)
             
-            # --- MINIMAL CHANGE APPLIED HERE ---
-            # The `scheduler_config` argument now correctly points to `optim_config.decoder_optim`
-            # instead of `optim_config.decoder_optim.sched`.
-            scheduler_config = prepare_lr_scheduler(
-                optimizer=optimizer, scheduler_config=optim_config.decoder_optim
+            # --- ROBUST FIX APPLIED HERE ---
+            # Manually instantiate the scheduler directly, bypassing the problematic
+            # `prepare_lr_scheduler` utility function.
+            logging.info("Manually instantiating NoamAnnealing scheduler.")
+            
+            scheduler_config = optim_config.decoder_optim.sched
+            
+            # The trainer computes max_steps at runtime. We access it here.
+            # NoamAnnealing can function without max_steps, but it's better to provide it.
+            max_steps = self.trainer.max_steps if self.trainer else -1
+            if max_steps is None or max_steps == -1:
+                 logging.warning(
+                    "Trainer.max_steps is not set, so NoamAnnealing scheduler will run indefinitely."
+                 )
+                 # Pass None to the scheduler if max_steps is not available
+                 max_steps = None
+
+            scheduler_instance = NoamAnnealing(
+                optimizer=optimizer,
+                d_model=scheduler_config.d_model,
+                warmup_steps=scheduler_config.warmup_steps,
+                min_lr=scheduler_config.min_lr,
+                max_steps=max_steps
             )
             
             scheduler = {
-                'scheduler': scheduler_config['scheduler'],
+                'scheduler': scheduler_instance,
                 'interval': 'step',
                 'frequency': 1,
             }
