@@ -13,13 +13,13 @@ from nemo.utils.trainer_utils import resolve_trainer_cfg
 from nemo.core.optim.lr_scheduler import prepare_lr_scheduler
 
 class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
-    def setup_optimization(self): # Note: optim_config argument removed
+    # --- This is the corrected approach: Override configure_optimizers ---
+    def configure_optimizers(self):
         """
-        This method is overridden to set up differential learning rates.
-        It is called automatically by the Pytorch Lightning Trainer.
+        Overrides the standard PyTorch Lightning method to set up
+        differential learning rates for the encoder and decoders.
         """
-        # Get the optimizer config from the model's internal config
-        optim_config = self.cfg.optim 
+        optim_config = self.cfg.optim
 
         if "encoder_optim" in optim_config and "decoder_optim" in optim_config:
             logging.info("Setting up differential learning rates for encoder and decoders.")
@@ -28,6 +28,7 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
                 "params": self.encoder.parameters(),
                 "lr": optim_config.encoder_optim.lr,
             }
+            # The decoder group includes the RNN-T decoder, joint network, and the new CTC head
             decoder_params = {
                 "params": list(self.decoder.parameters()) + list(self.joint.parameters()) + list(self.ctc_decoder.parameters()),
                 "lr": optim_config.decoder_optim.lr,
@@ -49,12 +50,10 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
                 'interval': 'step',
                 'frequency': 1,
             }
-            self._optimizer = optimizer
-            self._scheduler = scheduler
+            return [optimizer], [scheduler]
         else:
             logging.info("Using default single learning rate setup.")
-            # If our special config isn't found, call the original setup method
-            super().setup_optimization(optim_config)
+            return super().configure_optimizers()
 
 
 @hydra_runner(config_path="conf", config_name="your_config_name_here")
@@ -80,15 +79,12 @@ def main(cfg):
     del pretrained_model  # Free up memory
 
     # 3. Create a new state_dict, keeping only the encoder weights.
-    #    This directly implements your request: "we do not want the weights from the decoder".
     new_state_dict = {}
     for key, value in pretrained_weights.items():
         if key.startswith('encoder.'):
             new_state_dict[key] = value
 
     # 4. Load the filtered (encoder-only) weights into our new model.
-    #    `strict=False` is crucial because we are intentionally ignoring the decoder/joint weights
-    #    and the new CTC head has no corresponding pre-trained weights.
     asr_model.load_state_dict(new_state_dict, strict=False)
     
     logging.info(f"Successfully loaded {len(new_state_dict)} encoder weights.")
