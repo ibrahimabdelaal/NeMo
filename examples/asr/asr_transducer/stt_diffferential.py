@@ -57,7 +57,7 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             return super().configure_optimizers()
 
 
-@hydra_runner(config_path="conf", config_name="your_config_name_here")
+@hydra_runner(config_path="conf", config_name="para_hypird")
 def main(cfg):
     logging.info(f'Hydra config: {OmegaConf.to_yaml(cfg)}')
 
@@ -68,7 +68,7 @@ def main(cfg):
     
     # --- This is the critical fix ---
     # 1. Save the optimizer config BEFORE creating the model.
-    optim_config = cfg.model.optim
+    optim_config = cfg.optim
     
     # 2. Build the model from the config file using our custom class.
     logging.info("Building model from config...")
@@ -84,13 +84,19 @@ def main(cfg):
     # We load the full model into a temporary object just to get its state_dict
     pretrained_model = CustomHybridModel.from_pretrained(model_name=pretrained_model_name, map_location='cpu')
     pretrained_weights = pretrained_model.state_dict()
-    del pretrained_model  # Free up memory
-
-    # 5. Create a new state_dict, keeping only the encoder weights.
+    del pretrained_model  # Free up memory    # 5. Create a new state_dict, keeping only the encoder weights.
     new_state_dict = {}
+    excluded_prefixes = ['decoder.', 'joint.', 'ctc_decoder.']
+    
     for key, value in pretrained_weights.items():
+        # Only include encoder weights and exclude all decoder-related weights
         if key.startswith('encoder.'):
             new_state_dict[key] = value
+        elif not any(key.startswith(prefix) for prefix in excluded_prefixes):
+            # For weights that don't match these patterns and have matching shapes,
+            # we can try to load them
+            if key in asr_model.state_dict() and asr_model.state_dict()[key].shape == value.shape:
+                new_state_dict[key] = value
 
     # 6. Load the filtered (encoder-only) weights into our new model.
     asr_model.load_state_dict(new_state_dict, strict=False)
