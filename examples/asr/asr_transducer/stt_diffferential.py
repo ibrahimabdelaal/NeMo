@@ -43,16 +43,18 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             
             param_groups = [encoder_params, decoder_params]
             optimizer = torch.optim.AdamW(param_groups, **optimizer_kwargs)
+
+            # --- FINAL FIX APPLIED HERE ---
+            # The base NeMo model expects the optimizer to be stored on the object.
+            # We assign it here to make it accessible for the training_step.
+            self._optimizer = optimizer
             
-            # --- ROBUST FIX APPLIED HERE ---
-            # Manually instantiate the scheduler directly, bypassing the problematic
-            # `prepare_lr_scheduler` utility function.
+            # Manually instantiate the scheduler directly.
             logging.info("Manually instantiating NoamAnnealing scheduler.")
             
             scheduler_config = optim_config.decoder_optim.sched
             
             # The trainer computes max_steps at runtime. We access it here.
-            # NoamAnnealing can function without max_steps, but it's better to provide it.
             max_steps = self.trainer.max_steps if self.trainer else -1
             if max_steps is None or max_steps == -1:
                  logging.warning(
@@ -89,7 +91,6 @@ def main(cfg):
 
     # --- Definitive Logic: Build from config, then manually load filtered weights ---
     
-    # --- This is the critical fix ---
     # 1. Save the optimizer config BEFORE creating the model.
     optim_config = cfg.optim
     
@@ -107,7 +108,9 @@ def main(cfg):
     # We load the full model into a temporary object just to get its state_dict
     pretrained_model = CustomHybridModel.from_pretrained(model_name=pretrained_model_name, map_location='cpu')
     pretrained_weights = pretrained_model.state_dict()
-    del pretrained_model  # Free up memory    # 5. Create a new state_dict, keeping only the encoder weights.
+    del pretrained_model  # Free up memory
+    
+    # 5. Create a new state_dict, keeping only the encoder weights.
     new_state_dict = {}
     excluded_prefixes = ['decoder.', 'joint.', 'ctc_decoder.']
     
