@@ -44,7 +44,7 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             optimizer = torch.optim.AdamW(param_groups, **optimizer_kwargs)
             
             scheduler_config = prepare_lr_scheduler(
-                optimizer=optimizer, scheduler_config=optim_config.decoder_optim.sched, trainer=self.trainer
+                optimizer=optimizer, scheduler_config=optim_config.decoder_optim.sched
             )
             
             scheduler = {
