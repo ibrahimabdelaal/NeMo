@@ -13,7 +13,14 @@ from nemo.utils.trainer_utils import resolve_trainer_cfg
 from nemo.core.optim.lr_scheduler import prepare_lr_scheduler
 
 class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
-    def setup_optimization(self, optim_config):
+    def setup_optimization(self): # Note: optim_config argument removed
+        """
+        This method is overridden to set up differential learning rates.
+        It is called automatically by the Pytorch Lightning Trainer.
+        """
+        # Get the optimizer config from the model's internal config
+        optim_config = self.cfg.optim 
+
         if "encoder_optim" in optim_config and "decoder_optim" in optim_config:
             logging.info("Setting up differential learning rates for encoder and decoders.")
             
@@ -46,6 +53,7 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             self._scheduler = scheduler
         else:
             logging.info("Using default single learning rate setup.")
+            # If our special config isn't found, call the original setup method
             super().setup_optimization(optim_config)
 
 
