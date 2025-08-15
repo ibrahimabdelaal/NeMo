@@ -3,6 +3,7 @@ import lightning.pytorch as pl
 from omegaconf import OmegaConf
 import tarfile
 import tempfile
+import os
 
 from nemo.collections.asr.models import EncDecHybridRNNTCTCBPEModel
 from nemo.core.config import hydra_runner
@@ -63,10 +64,15 @@ def main(cfg):
     cfg.model._target_ = f'{__name__}.CustomHybridModel'
     asr_model = CustomHybridModel(cfg=cfg.model, trainer=trainer)
 
+    # --- IMPORTANT: The following block REPLACES `maybe_init_from_pretrained_checkpoint` ---
     # 2. Manually load the pretrained weights and filter them.
     logging.info(f"Loading and filtering weights from {cfg.init_from_nemo_model}")
     
     with tempfile.TemporaryDirectory() as restore_dir:
+        # Ensure the .nemo file exists before trying to open it
+        if not os.path.exists(cfg.init_from_nemo_model):
+            raise FileNotFoundError(f"The .nemo file was not found at path: {cfg.init_from_nemo_model}")
+            
         with tarfile.open(cfg.init_from_nemo_model, "r:gz") as tar:
             tar.extractall(path=restore_dir)
         
