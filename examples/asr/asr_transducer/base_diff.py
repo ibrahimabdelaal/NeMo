@@ -66,17 +66,15 @@ class CustomHybridModel(EncDecHybridRNNTCTCBPEModel):
             return super().configure_optimizers()
 
 # --- Use this updated main function ---
-@hydra_runner(config_path="conf", config_name="para_hypird") # Point to your full config
+# --- Use this updated main function ---
+@hydra_runner(config_path="conf", config_name="para_hypird_resume")
 def main(cfg):
     logging.info(f'Hydra config: {OmegaConf.to_yaml(cfg)}')
 
     trainer = pl.Trainer(**resolve_trainer_cfg(cfg.trainer))
     exp_manager(trainer, cfg.get("exp_manager", None))
 
-    # --- ✨ MORE ROBUST MODEL LOADING LOGIC ---
-
-    # Step 1: Restore the model from the .nemo file WITHOUT overriding the config yet.
-    # This ensures the model object is created correctly first.
+    # Step 1: Restore the model from the .nemo file.
     logging.info(f"Restoring model from: {cfg.model.restore_from_path}")
     asr_model = CustomHybridModel.restore_from(
         restore_path=cfg.model.restore_from_path,
@@ -84,16 +82,34 @@ def main(cfg):
     )
     logging.info("Model restored successfully.")
 
-    # Step 2: Manually and explicitly update the model's configuration with the new datasets.
-    # This is the key fix that prevents the dataloader error.
-    logging.info("Explicitly setting up new training and validation datasets...")
-    asr_model.setup_training_data(cfg.model.train_ds)
-    asr_model.setup_validation_data(cfg.model.validation_ds)
-    if hasattr(cfg.model, 'test_ds'):
-        asr_model.setup_test_data(cfg.model.test_ds)
+    # --- ✨ KEY FIX APPLIED HERE ---
+    # Step 2: Manually resolve the sample_rate before updating the model's dataset config.
+    # We create a new config object for the datasets and explicitly set the sample rate value.
+    
+    # Get the concrete sample_rate value from the main config
+    sample_rate_val = cfg.model.sample_rate
+    
+    # Create a new dataset config with the resolved sample_rate
+    new_data_cfg = OmegaConf.create({
+        'train_ds': cfg.model.train_ds,
+        'validation_ds': cfg.model.validation_ds,
+        'test_ds': cfg.model.get('test_ds', None) # Use .get for optional test_ds
+    })
+    
+    # Update the sample_rate in the new config to be the actual value, not the variable
+    new_data_cfg.train_ds.sample_rate = sample_rate_val
+    new_data_cfg.validation_ds.sample_rate = sample_rate_val
+    if new_data_cfg.test_ds:
+        new_data_cfg.test_ds.sample_rate = sample_rate_val
 
-    # Step 3 (As before): Re-attach the optimizer config so our custom
-    # `configure_optimizers` method can use it.
+    # Step 3: Use the model's setup methods with the fully resolved data config
+    logging.info("Explicitly setting up new training and validation datasets...")
+    asr_model.setup_training_data(new_data_cfg.train_ds)
+    asr_model.setup_validation_data(new_data_cfg.validation_ds)
+    if new_data_cfg.test_ds:
+        asr_model.setup_test_data(new_data_cfg.test_ds)
+
+    # Step 4 (As before): Re-attach the optimizer config
     asr_model._new_optim_config = cfg.optim
 
     logging.info("--- ✅ Model setup complete. Starting Phase 2 training... ---")
